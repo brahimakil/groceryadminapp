@@ -40,11 +40,17 @@ dependencies:
   image_picker: ^0.8.5
   uuid: ^3.0.6
   fluttertoast: ^8.0.9
-  # Firebase - use these exact versions
+  
+  # Firebase
   cloud_firestore: ^4.8.0
   firebase_core: ^2.14.0
   firebase_core_web: ^2.3.0
   cloud_firestore_web: ^3.3.0
+  
+  # Charts and Analytics (using only fl_chart)
+  fl_chart: ^0.65.0
+  intl: ^0.18.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

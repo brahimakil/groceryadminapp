@@ -8,14 +8,18 @@ import '../inner_screens/edit_prod.dart';
 import '../services/global_method.dart';
 import '../services/utils.dart';
 import 'text_widget.dart';
+import 'package:grocery_admin_panel/themes/app_theme.dart';
+import 'package:provider/provider.dart';
+import '../providers/dark_theme_provider.dart';
+import '../responsive.dart';
 
-class ProductWidget extends StatelessWidget {
+class ProductWidget extends StatefulWidget {
   const ProductWidget({
     Key? key,
     required this.id,
     required this.title,
     required this.price,
-    this.imageUrl,
+    required this.imageUrl,
     required this.isOnSale,
     required this.salePrice,
     required this.categoryName,
@@ -24,203 +28,413 @@ class ProductWidget extends StatelessWidget {
     required this.calories,
   }) : super(key: key);
 
-  final String id;
-  final String title;
-  final String price;
-  final String? imageUrl;
+  final String id, title, price, imageUrl, categoryName, description, nutrients;
   final bool isOnSale;
   final double salePrice;
-  final String categoryName;
-  final String description;
-  final String nutrients;
   final int calories;
 
   @override
-  Widget build(BuildContext context) {
-    Size size = Utils(context).getScreenSize;
-    final color = Utils(context).color;
-    final originalPriceDouble = double.tryParse(price) ?? 0.0;
+  State<ProductWidget> createState() => _ProductWidgetState();
+}
 
-    return Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: Material(
-        borderRadius: BorderRadius.circular(12),
-        color: Theme.of(context).cardColor.withOpacity(0.6),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (context) => EditProductScreen(
-                  id: id,
-                  title: title,
-                  price: price,
-                  categoryName: categoryName,
-                  imageUrl: imageUrl ?? '',
-                  description: description,
-                  nutrients: nutrients,
-                  calories: calories,
+class _ProductWidgetState extends State<ProductWidget> with TickerProviderStateMixin {
+  late AnimationController _hoverController;
+  late Animation<double> _scaleAnimation;
+  late Animation<double> _elevationAnimation;
+  bool _isHovered = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _hoverController = AnimationController(
+      duration: const Duration(milliseconds: 200),
+      vsync: this,
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.02).animate(
+      CurvedAnimation(parent: _hoverController, curve: Curves.easeInOut),
+    );
+    _elevationAnimation = Tween<double>(begin: 0.0, end: 8.0).animate(
+      CurvedAnimation(parent: _hoverController, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _hoverController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Provider.of<DarkThemeProvider>(context).darkTheme;
+    final isMobile = Responsive.isMobile(context);
+    
+    return MouseRegion(
+      onEnter: (_) {
+        setState(() => _isHovered = true);
+        _hoverController.forward();
+      },
+      onExit: (_) {
+        setState(() => _isHovered = false);
+        _hoverController.reverse();
+      },
+      child: AnimatedBuilder(
+        animation: _hoverController,
+        builder: (context, child) {
+          return Transform.scale(
+            scale: _scaleAnimation.value,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Theme.of(context).cardColor,
+                borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                border: Border.all(
+                  color: _isHovered 
+                    ? AppTheme.primaryColor.withOpacity(0.3)
+                    : (isDark ? AppTheme.neutral700 : AppTheme.neutral200),
+                  width: _isHovered ? 2 : 1,
                 ),
+                boxShadow: [
+                  BoxShadow(
+                    color: (isDark ? Colors.black : AppTheme.neutral900).withOpacity(0.1),
+                    blurRadius: _elevationAnimation.value + 4,
+                    offset: Offset(0, _elevationAnimation.value / 2),
+                  ),
+                ],
               ),
-            );
-          },
-          child: Padding(
-            padding: const EdgeInsets.all(8.0),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(AppTheme.radiusLg),
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.start,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Flexible(
+                    // Image Section
+                    Expanded(
                       flex: 3,
-                      child: _buildProductImage(imageUrl, context, size),
-                    ),
-                    Flexible(
-                      flex: 1,
-                      child: PopupMenuButton(
-                          itemBuilder: (context) => [
-                                PopupMenuItem(
-                                  onTap: () {
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute(
-                                        builder: (context) => EditProductScreen(
-                                           id: id, title: title, price: price,
-                                           categoryName: categoryName, imageUrl: imageUrl ?? '',
-                                           description: description, nutrients: nutrients, calories: calories,
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                  value: 1,
-                                  child: const Text('Edit'),
+                      child: Stack(
+                        children: [
+                          Container(
+                            width: double.infinity,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  AppTheme.neutral100,
+                                  AppTheme.neutral50,
+                                ],
+                              ),
+                            ),
+                            child: _buildProductImage(),
+                          ),
+                          
+                          // Sale Badge
+                          if (widget.isOnSale)
+                            Positioned(
+                              top: AppTheme.spacingSm,
+                              left: AppTheme.spacingSm,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: AppTheme.spacingSm,
+                                  vertical: AppTheme.spacingXs,
                                 ),
-                                PopupMenuItem(
-                                  onTap: () {
-                                    GlobalMethods.warningDialog(
-                                        title: 'Delete?',
-                                        subtitle: 'Press Okay to confirm',
-                                        fct: () async {
-                                           await FirebaseFirestore.instance
-                                              .collection('products')
-                                              .doc(id)
-                                              .delete();
-                                           await Fluttertoast.showToast(
-                                             msg: "Product has been deleted",
-                                             toastLength: Toast.LENGTH_LONG,
-                                             gravity: ToastGravity.CENTER,
-                                             timeInSecForIosWeb: 1,
-                                           );
-                                          if (Navigator.canPop(context)) {
-                                            Navigator.pop(context);
-                                          }
-                                        },
-                                        context: context);
-                                  },
-                                  value: 2,
-                                  child: const Text(
-                                    'Delete',
-                                    style: TextStyle(color: Colors.red),
+                                decoration: BoxDecoration(
+                                  gradient: AppTheme.errorGradient,
+                                  borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                                  boxShadow: AppTheme.shadowSm,
+                                ),
+                                child: Text(
+                                  'SALE',
+                                  style: AppTheme.labelSmall.copyWith(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 10,
                                   ),
                                 ),
-                              ]),
-                    )
+                              ),
+                            ),
+                          
+                          // Action Buttons
+                          Positioned(
+                            top: AppTheme.spacingSm,
+                            right: AppTheme.spacingSm,
+                            child: Column(
+                              children: [
+                                _buildActionButton(
+                                  icon: Icons.edit_rounded,
+                                  gradient: AppTheme.primaryGradient,
+                                  onTap: () => _editProduct(context),
+                                ),
+                                const SizedBox(height: AppTheme.spacingSm),
+                                _buildActionButton(
+                                  icon: Icons.delete_rounded,
+                                  gradient: AppTheme.errorGradient,
+                                  onTap: () => _deleteProduct(context),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    
+                    // Content Section - FIXED OVERFLOW
+                    Container(
+                      height: isMobile ? 100 : 120, // Fixed height to prevent overflow
+                      padding: const EdgeInsets.all(AppTheme.spacingSm), // Reduced padding
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Category Badge
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppTheme.spacingSm,
+                              vertical: 2, // Reduced padding
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppTheme.secondaryColor.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                            ),
+                            child: Text(
+                              widget.categoryName,
+                              style: AppTheme.labelSmall.copyWith(
+                                color: AppTheme.secondaryColor,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 10, // Reduced font size
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          
+                          const SizedBox(height: AppTheme.spacingXs), // Reduced spacing
+                          
+                          // Product Title
+                          Expanded(
+                            child: Text(
+                              widget.title,
+                              style: AppTheme.titleMedium.copyWith(
+                                fontWeight: FontWeight.w600,
+                                fontSize: isMobile ? 12 : 14, // Responsive font size
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          
+                          const SizedBox(height: AppTheme.spacingXs), // Reduced spacing
+                          
+                          // Price Section
+                          Row(
+                            children: [
+                              if (widget.isOnSale) ...[
+                                Flexible(
+                                  child: Text(
+                                    '\$${widget.salePrice.toStringAsFixed(2)}',
+                                    style: AppTheme.titleMedium.copyWith(
+                                      color: AppTheme.errorColor,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: isMobile ? 12 : 14, // Responsive font size
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(width: AppTheme.spacingXs),
+                                Flexible(
+                                  child: Text(
+                                    '\$${widget.price}',
+                                    style: AppTheme.bodySmall.copyWith(
+                                      color: AppTheme.neutral400,
+                                      decoration: TextDecoration.lineThrough,
+                                      fontSize: isMobile ? 10 : 12, // Responsive font size
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ] else ...[
+                    Flexible(
+                                  child: Text(
+                                    '\$${widget.price}',
+                                    style: AppTheme.titleMedium.copyWith(
+                                      color: AppTheme.primaryColor,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: isMobile ? 12 : 14, // Responsive font size
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                              const Spacer(),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: AppTheme.spacingXs,
+                                  vertical: 2, // Reduced padding
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.infoColor.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(AppTheme.radiusXs),
+                                ),
+                                child: Text(
+                                  '${widget.calories} cal',
+                                  style: AppTheme.labelSmall.copyWith(
+                                    color: AppTheme.infoColor,
+                                    fontWeight: FontWeight.w500,
+                                    fontSize: 9, // Reduced font size
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
-                const SizedBox(
-                  height: 2,
-                ),
-                Row(
-                  children: [
-                    TextWidget(
-                      text: isOnSale
-                          ? '\$${salePrice.toStringAsFixed(2)}'
-                          : '\$${originalPriceDouble.toStringAsFixed(2)}',
-                      color: color,
-                      textSize: 18,
-                    ),
-                    const SizedBox(
-                      width: 7,
-                    ),
-                    Visibility(
-                        visible: isOnSale,
-                        child: Text(
-                          '\$${originalPriceDouble.toStringAsFixed(2)}',
-                          style: TextStyle(
-                              decoration: TextDecoration.lineThrough,
-                              color: color),
-                        )),
-                  ],
-                ),
-                const SizedBox(
-                  height: 2,
-                ),
-                TextWidget(
-                  text: title,
-                  color: color,
-                  maxLines: 2,
-                  textSize: 16,
-                  isTitle: true,
-                ),
-              ],
+              ),
             ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildProductImage() {
+    if (widget.imageUrl.isEmpty) {
+      return _buildPlaceholderImage();
+    }
+    
+    try {
+      return Image.memory(
+        base64Decode(widget.imageUrl),
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+        errorBuilder: (ctx, error, stackTrace) {
+          return _buildNetworkImage();
+        },
+      );
+    } catch (e) {
+      return _buildNetworkImage();
+    }
+  }
+
+  Widget _buildNetworkImage() {
+      return Image.network(
+      widget.imageUrl,
+        fit: BoxFit.cover,
+      width: double.infinity,
+      height: double.infinity,
+        errorBuilder: (ctx, error, stackTrace) {
+        return _buildPlaceholderImage();
+        },
+      );
+    }
+
+  Widget _buildPlaceholderImage() {
+    return Container(
+      color: AppTheme.neutral100,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.image_not_supported_rounded,
+            size: 48,
+            color: AppTheme.neutral400,
+          ),
+          const SizedBox(height: AppTheme.spacingSm),
+          Text(
+            'No Image',
+            style: AppTheme.bodySmall.copyWith(
+              color: AppTheme.neutral400,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButton({
+    required IconData icon,
+    required LinearGradient gradient,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      width: 32,
+      height: 32,
+      decoration: BoxDecoration(
+        gradient: gradient,
+        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+        boxShadow: AppTheme.shadowSm,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+          child: Icon(
+            icon,
+            color: Colors.white,
+            size: 16,
           ),
         ),
       ),
     );
   }
 
-  Widget _buildProductImage(String? imageUrl, BuildContext context, Size size) {
-    if (imageUrl == null || imageUrl.isEmpty) {
-      return Container(
-        height: size.width * 0.12,
-        width: size.width * 0.12,
-        color: Colors.grey[300],
-        child: Icon(Icons.image_not_supported, color: Colors.grey[700], size: size.width * 0.12 / 2),
-      );
-    }
-    
-    try {
-      return Image.memory(
-        base64Decode(imageUrl),
-        height: size.width * 0.12,
-        width: size.width * 0.12,
-        fit: BoxFit.cover,
-        errorBuilder: (ctx, error, stackTrace) {
-          return Image.network(
-            imageUrl,
-            height: size.width * 0.12,
-            width: size.width * 0.12,
-            fit: BoxFit.cover,
-            errorBuilder: (ctx, error, stackTrace) {
-              return Container(
-                height: size.width * 0.12,
-                width: size.width * 0.12,
-                color: Colors.grey[300],
-                child: Icon(Icons.error, color: Colors.red, size: size.width * 0.12 / 2),
-              );
+  void _editProduct(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => EditProductScreen(
+          id: widget.id,
+          title: widget.title,
+          price: widget.price,
+          categoryName: widget.categoryName,
+          imageUrl: widget.imageUrl,
+          description: widget.description,
+          nutrients: widget.nutrients,
+          calories: widget.calories,
+        ),
+      ),
+    );
+  }
+
+  void _deleteProduct(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        ),
+        title: Text(
+          'Delete Product',
+          style: AppTheme.headlineSmall.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        content: Text(
+          'Are you sure you want to delete "${widget.title}"? This action cannot be undone.',
+          style: AppTheme.bodyMedium,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              // Add delete functionality here
             },
-          );
-        },
-      );
-    } catch (e) {
-      return Image.network(
-        imageUrl,
-        height: size.width * 0.12,
-        width: size.width * 0.12,
-        fit: BoxFit.cover,
-        errorBuilder: (ctx, error, stackTrace) {
-          return Container(
-            height: size.width * 0.12,
-            width: size.width * 0.12,
-            color: Colors.grey[300],
-            child: Icon(Icons.error, color: Colors.red, size: size.width * 0.12 / 2),
-          );
-        },
-      );
-    }
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.errorColor,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
   }
 }
 

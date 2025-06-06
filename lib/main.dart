@@ -1,9 +1,9 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:grocery_admin_panel/screens/main_screen.dart';
+import 'package:grocery_admin_panel/themes/app_theme.dart';
 import 'package:provider/provider.dart';
 
-import 'consts/theme_data.dart';
 import 'controllers/MenuController.dart' as grocery;
 import 'inner_screens/add_prod.dart';
 import 'providers/dark_theme_provider.dart';
@@ -54,8 +54,8 @@ class _MyAppState extends State<MyApp> {
         builder: (context, themeProvider, _) {
           return MaterialApp(
             debugShowCheckedModeBanner: false,
-            title: 'Grocery',
-            theme: Styles.themeData(themeProvider.darkTheme, context),
+            title: 'Grocery Admin Panel',
+            theme: themeProvider.darkTheme ? AppTheme.darkTheme : AppTheme.lightTheme,
             home: const _AppLoader(),
             routes: {
               UploadProductForm.routeName: (context) => const UploadProductForm(),
@@ -95,9 +95,38 @@ class __AppLoaderState extends State<_AppLoader> {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
+    return Scaffold(
+      backgroundColor: AppTheme.primaryColor,
       body: Center(
-        child: CircularProgressIndicator(),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(AppTheme.spacingXl),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+                boxShadow: AppTheme.shadowLg,
+              ),
+              child: Icon(
+                Icons.store,
+                size: 64,
+                color: AppTheme.primaryColor,
+              ),
+            ),
+            const SizedBox(height: AppTheme.spacingXl),
+            Text(
+              'Grocery Admin Panel',
+              style: AppTheme.headingLarge.copyWith(
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: AppTheme.spacingMd),
+            const CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+            ),
+          ],
+        ),
       ),
     );
   }

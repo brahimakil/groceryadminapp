@@ -5,20 +5,18 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dotted_border/dotted_border.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import '../consts/constants.dart'; // Add this line
-import 'package:grocery_admin_panel/models/category_model.dart';
+import '../consts/constants.dart';
 import 'package:grocery_admin_panel/services/global_method.dart';
 import 'package:grocery_admin_panel/services/utils.dart';
 import 'package:grocery_admin_panel/widgets/header.dart';
 import 'package:grocery_admin_panel/widgets/side_menu.dart';
-import 'package:grocery_admin_panel/widgets/text_widget.dart';
 import 'package:grocery_admin_panel/responsive.dart';
-import 'package:grocery_admin_panel/widgets/buttons.dart';
 import 'package:grocery_admin_panel/controllers/MenuController.dart' as grocery;
 import 'package:grocery_admin_panel/screens/loading_manager.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
+import 'package:grocery_admin_panel/themes/app_theme.dart';
 
 class CategoriesScreen extends StatefulWidget {
   static const String routeName = '/CategoriesScreen';
@@ -43,115 +41,166 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
   }
 
   Future<void> _pickImage() async {
-    if (!kIsWeb) {
-      final ImagePicker _picker = ImagePicker();
-      XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+    try {
+      final ImagePicker picker = ImagePicker();
+      XFile? image = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 85,
+      );
 
       if (image != null) {
-        var selected = File(image.path);
-        setState(() {
-          _pickedImage = selected;
-        });
+        if (kIsWeb) {
+          var f = await image.readAsBytes();
+          setState(() {
+            webImage = f;
+            _pickedImage = File("web_image"); // Placeholder for web
+          });
+        } else {
+          var selected = File(image.path);
+          setState(() {
+            _pickedImage = selected;
+          });
+        }
       }
-    } else if (kIsWeb) {
-      final ImagePicker _picker = ImagePicker();
-      XFile? image = await _picker.pickImage(source: ImageSource.gallery);
-      if (image != null) {
-        var f = await image.readAsBytes();
-        setState(() {
-          _pickedImage = File("a");
-          webImage = f;
-        });
-      }
+    } catch (e) {
+      print('Error picking image: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error picking image: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
   Future<void> _addCategory() async {
-    final isValid = _formKey.currentState!.validate();
-    FocusScope.of(context).unfocus();
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
 
-    if (isValid) {
-      setState(() {
-        _isLoading = true;
-      });
+    if (_categoryNameController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a category name'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
 
-      try {
-        final categoryId = const Uuid().v4();
-        String? imageUrl;
-        
-        // Convert image to Base64 if available
-        if (_pickedImage != null || webImage.lengthInBytes > 10) {
-          String base64Image;
-          if (kIsWeb) {
-            base64Image = base64Encode(webImage);
-          } else {
-            List<int> imageBytes = await _pickedImage!.readAsBytes();
-            base64Image = base64Encode(imageBytes);
-          }
-          // Store as base64 string directly
-          imageUrl = base64Image;
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final categoryId = const Uuid().v4();
+      String? imageUrl;
+      
+      // Convert image to Base64 if available
+      if (_pickedImage != null && (kIsWeb ? webImage.isNotEmpty : true)) {
+        String base64Image;
+        if (kIsWeb) {
+          base64Image = base64Encode(webImage);
+        } else {
+          List<int> imageBytes = await _pickedImage!.readAsBytes();
+          base64Image = base64Encode(imageBytes);
         }
-        
-        await FirebaseFirestore.instance.collection('categories').doc(categoryId).set({
-          'id': categoryId,
-          'name': _categoryNameController.text.trim(),
-          'imageUrl': imageUrl,
-          'createdAt': Timestamp.now(),
-        });
-        
-        _categoryNameController.clear();
-        setState(() {
-          _pickedImage = null;
-          webImage = Uint8List(8);
-          _isLoading = false;
-        });
-        
-        // Show success message
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Category added successfully'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
-          ),
-        );
-      } catch (error) {
-        String errorMessage = error.toString();
-        // Check for permission errors
-        if (errorMessage.contains('permission-denied')) {
-          errorMessage = 'Permission denied. Please check your Firestore security rules.';
-        }
-        
-        GlobalMethods.errorDialog(
-          subtitle: 'Failed to add category: $errorMessage', 
-          context: context
-        );
-        setState(() {
-          _isLoading = false;
-        });
+        imageUrl = base64Image;
       }
+      
+      await FirebaseFirestore.instance.collection('categories').doc(categoryId).set({
+        'id': categoryId,
+        'name': _categoryNameController.text.trim(),
+        'imageUrl': imageUrl,
+        'createdAt': Timestamp.now(),
+      });
+      
+      // Clear form
+      _categoryNameController.clear();
+      setState(() {
+        _pickedImage = null;
+        webImage = Uint8List(8);
+        _isLoading = false;
+      });
+      
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Category added successfully!'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    } catch (error) {
+      print('Error adding category: $error');
+      String errorMessage = error.toString();
+      if (errorMessage.contains('permission-denied')) {
+        errorMessage = 'Permission denied. Please check your Firestore security rules.';
+      }
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to add category: $errorMessage'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+      
+      setState(() {
+        _isLoading = false;
+      });
     }
   }
 
-  Future<void> _deleteCategory(String id) async {
+  Future<void> _deleteCategory(String id, String name) async {
+    // Show confirmation dialog
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Delete Category'),
+          content: Text('Are you sure you want to delete "$name"?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm != true) return;
+
     setState(() {
       _isLoading = true;
     });
 
     try {
       await FirebaseFirestore.instance.collection('categories').doc(id).delete();
-      setState(() {
-        _isLoading = false;
-      });
-    } catch (error) {
-      String errorMessage = error.toString();
-      if (errorMessage.contains('permission-denied')) {
-        errorMessage = 'Permission denied. Make sure you have the right permissions to delete categories.';
-      }
       
-      GlobalMethods.errorDialog(
-        subtitle: 'Failed to delete category: $errorMessage', 
-        context: context
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Category "$name" deleted successfully'),
+          backgroundColor: Colors.green,
+        ),
       );
+    } catch (error) {
+      print('Error deleting category: $error');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to delete category: $error'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
       setState(() {
         _isLoading = false;
       });
@@ -163,59 +212,59 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
       return Container(
         height: size,
         width: size,
-        color: Colors.grey[300],
-        child: Icon(Icons.category, color: Colors.grey[700], size: size / 2),
+        decoration: BoxDecoration(
+          color: AppTheme.neutral200,
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        ),
+        child: Icon(
+          Icons.category,
+          color: AppTheme.neutral500,
+          size: size * 0.4,
+        ),
       );
     }
     
     try {
-      // Try to decode the base64 string with adjusted fit and container size
       return Container(
         height: size,
         width: size,
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+          border: Border.all(color: AppTheme.neutral200),
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(6.0), // Increased padding to zoom out more
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
           child: Image.memory(
             base64Decode(imageUrl),
-            fit: BoxFit.contain, // Keep contain for better image display
+            fit: BoxFit.cover,
             errorBuilder: (ctx, error, stackTrace) {
               return Container(
                 height: size,
                 width: size,
-                color: Colors.grey[300],
-                child: Icon(Icons.error, color: Colors.red, size: size / 2),
+                color: AppTheme.neutral200,
+                child: Icon(
+                  Icons.error,
+                  color: Colors.red,
+                  size: size * 0.4,
+                ),
               );
             },
           ),
         ),
       );
     } catch (e) {
-      // If base64 decoding fails, try as network image
       return Container(
         height: size,
         width: size,
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(8),
+          color: AppTheme.neutral200,
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(6.0),
-          child: Image.network(
-            imageUrl,
-            fit: BoxFit.contain,
-            errorBuilder: (ctx, error, stackTrace) {
-              return Container(
-                height: size,
-                width: size,
-                color: Colors.grey[300],
-                child: Icon(Icons.error, color: Colors.red, size: size / 2),
-              );
-            },
-          ),
+        child: Icon(
+          Icons.error,
+          color: Colors.red,
+          size: size * 0.4,
         ),
       );
     }
@@ -223,12 +272,9 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final color = Utils(context).color;
-    final size = Utils(context).getScreenSize;
-
     return Scaffold(
       key: context.read<grocery.GroceryMenuController>().getCategoriesScaffoldKey,
-      drawer: const SideMenu(),
+      drawer: !Responsive.isDesktop(context) ? const SideMenu() : null,
       body: LoadingManager(
         isLoading: _isLoading,
         child: SafeArea(
@@ -241,329 +287,467 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                 ),
               Expanded(
                 flex: 5,
-                child: SingleChildScrollView(
-                  controller: ScrollController(),
-                  padding: const EdgeInsets.all(defaultPadding),
-                  child: Column(
-                    children: [
-                      Header(
-                        fct: () {
-                          context.read<grocery.GroceryMenuController>().controlCategoriesMenu();
-                        },
-                        title: 'Categories',
-                      ),
-                      const SizedBox(height: defaultPadding),
-                      Container(
-                        width: size.width > 650 ? 650 : size.width,
-                        margin: const EdgeInsets.all(20),
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).cardColor,
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.grey.withOpacity(0.2),
-                              spreadRadius: 2,
-                              blurRadius: 5,
-                              offset: const Offset(0, 3),
-                            ),
-                          ],
-                        ),
-                        child: Form(
-                          key: _formKey,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Center(
-                                child: TextWidget(
-                                  text: 'Add New Category',
-                                  color: color,
-                                  isTitle: true,
-                                  textSize: 22,
-                                ),
-                              ),
-                              const SizedBox(height: 20),
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(
-                                    flex: 1,
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        TextWidget(
-                                          text: 'Category Icon',
-                                          color: color,
-                                          isTitle: true,
-                                        ),
-                                        const SizedBox(height: 10),
-                                        // Image picker
-                                        GestureDetector(
-                                          onTap: () {
-                                            _pickImage();
-                                          },
-                                          child: Container(
-                                            height: 120,
-                                            decoration: BoxDecoration(
-                                              color: Theme.of(context).scaffoldBackgroundColor,
-                                              borderRadius: BorderRadius.circular(12),
-                                              border: Border.all(
-                                                color: color.withOpacity(0.3),
-                                              ),
-                                            ),
-                                            child: _pickedImage == null
-                                                ? DottedBorder(
-                                                    dashPattern: const [6, 7],
-                                                    borderType: BorderType.RRect,
-                                                    radius: const Radius.circular(12),
-                                                    child: Center(
-                                                      child: Column(
-                                                        mainAxisAlignment: MainAxisAlignment.center,
-                                                        crossAxisAlignment: CrossAxisAlignment.center,
-                                                        children: [
-                                                          Icon(
-                                                            Icons.image_outlined,
-                                                            color: color,
-                                                            size: 50,
-                                                          ),
-                                                          const SizedBox(height: 8),
-                                                          TextWidget(
-                                                            text: 'Tap to select icon',
-                                                            color: color,
-                                                          ),
-                                                        ],
-                                                      ),
-                                                    ),
-                                                  )
-                                                : kIsWeb
-                                                    ? ClipRRect(
-                                                        borderRadius: BorderRadius.circular(12),
-                                                        child: Image.memory(webImage, fit: BoxFit.cover),
-                                                      )
-                                                    : ClipRRect(
-                                                        borderRadius: BorderRadius.circular(12),
-                                                        child: Image.file(_pickedImage!, fit: BoxFit.cover),
-                                                      ),
-                                          ),
-                                        ),
-                                        if (_pickedImage != null) 
-                                          TextButton.icon(
-                                            onPressed: () {
-                                              setState(() {
-                                                _pickedImage = null;
-                                                webImage = Uint8List(8);
-                                              });
-                                            },
-                                            icon: const Icon(Icons.clear, color: Colors.red),
-                                            label: const Text('Clear image', style: TextStyle(color: Colors.red)),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(width: 20),
-                                  Expanded(
-                                    flex: 1,
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        TextWidget(
-                                          text: 'Category Name',
-                                          color: color,
-                                          isTitle: true,
-                                        ),
-                                        const SizedBox(height: 10),
-                                        TextFormField(
-                                          controller: _categoryNameController,
-                                          validator: (value) {
-                                            if (value == null || value.isEmpty) {
-                                              return 'Please enter a category name';
-                                            }
-                                            return null;
-                                          },
-                                          decoration: InputDecoration(
-                                            filled: true,
-                                            fillColor: Theme.of(context).scaffoldBackgroundColor,
-                                            border: OutlineInputBorder(
-                                              borderRadius: BorderRadius.circular(12),
-                                              borderSide: BorderSide(color: color.withOpacity(0.3)),
-                                            ),
-                                            enabledBorder: OutlineInputBorder(
-                                              borderRadius: BorderRadius.circular(12),
-                                              borderSide: BorderSide(color: color.withOpacity(0.3)),
-                                            ),
-                                            focusedBorder: OutlineInputBorder(
-                                              borderRadius: BorderRadius.circular(12),
-                                              borderSide: BorderSide(color: color),
-                                            ),
-                                            hintText: 'Enter category name',
-                                          ),
-                                        ),
-                                        const SizedBox(height: 30),
-                                        SizedBox(
-                                          width: double.infinity,
-                                          child: ButtonsWidget(
-                                            onPressed: () {
-                                              _addCategory();
-                                            },
-                                            text: 'Add Category',
-                                            icon: Icons.add,
-                                            backgroundColor: Colors.blue,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 20),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).cardColor,
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.grey.withOpacity(0.2),
-                              spreadRadius: 2,
-                              blurRadius: 5,
-                              offset: const Offset(0, 3),
-                            ),
-                          ],
-                        ),
+                child: Column(
+                  children: [
+                    Header(
+                      fct: () {
+                        context.read<grocery.GroceryMenuController>().controlCategoriesMenu();
+                      },
+                      title: 'Categories',
+                    ),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(AppTheme.spacingLg),
                         child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Padding(
-                              padding: const EdgeInsets.all(16.0),
+                            // Header Section
+                            Container(
+                              padding: const EdgeInsets.all(AppTheme.spacingLg),
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [
+                                    AppTheme.secondaryColor,
+                                    AppTheme.secondaryColor.withOpacity(0.8),
+                                  ],
+                                ),
+                                borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                                boxShadow: AppTheme.shadowSm,
+                              ),
                               child: Row(
                                 children: [
-                                  Icon(
-                                    Icons.category,
-                                    color: color,
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Manage Categories',
+                                          style: AppTheme.headlineLarge.copyWith(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        const SizedBox(height: AppTheme.spacingSm),
+                                        Text(
+                                          'Organize your products with categories',
+                                          style: AppTheme.bodyLarge.copyWith(
+                                            color: Colors.white.withOpacity(0.9),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                  const SizedBox(width: 10),
-                                  TextWidget(
-                                    text: 'Available Categories',
-                                    color: color,
-                                    textSize: 20,
-                                    isTitle: true,
+                                  Container(
+                                    padding: const EdgeInsets.all(AppTheme.spacingLg),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withOpacity(0.2),
+                                      borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                                    ),
+                                    child: const Icon(
+                                      Icons.category_rounded,
+                                      size: 32,
+                                      color: Colors.white,
+                                    ),
                                   ),
                                 ],
                               ),
                             ),
-                            const Divider(),
-                            StreamBuilder<QuerySnapshot>(
-                              stream: FirebaseFirestore.instance
-                                .collection('categories')
-                                .orderBy('createdAt', descending: true)
-                                .limit(20)
-                                .snapshots(),
-                              builder: (context, snapshot) {
-                                if (snapshot.connectionState == ConnectionState.waiting) {
-                                  return const Center(child: CircularProgressIndicator());
-                                } else if (snapshot.hasError) {
-                                  return Center(
-                                    child: Text('Error: ${snapshot.error}', style: const TextStyle(color: Colors.red)),
-                                  );
-                                } else if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                                  return const Padding(
-                                    padding: EdgeInsets.all(20.0),
-                                    child: Center(child: Text('No categories found. Add your first category!')),
-                                  );
-                                }
-                                
-                                return SingleChildScrollView(
-                                  scrollDirection: Axis.horizontal,
-                                  child: DataTable(
-                                    decoration: const BoxDecoration(
-                                      border: Border(
-                                        bottom: BorderSide.none,
+                            
+                            const SizedBox(height: AppTheme.spacingXl),
+                            
+                            // Add Category Section
+                            Container(
+                              padding: const EdgeInsets.all(AppTheme.spacingLg),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).cardColor,
+                                borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                                border: Border.all(color: Theme.of(context).dividerColor),
+                                boxShadow: AppTheme.shadowSm,
+                              ),
+                              child: Form(
+                                key: _formKey,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Add New Category',
+                                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                                        fontWeight: FontWeight.w600,
                                       ),
                                     ),
-                                    columns: [
-                                      DataColumn(label: Text('Icon', style: TextStyle(fontWeight: FontWeight.bold, color: color))),
-                                      DataColumn(label: Text('Category Name', style: TextStyle(fontWeight: FontWeight.bold, color: color))),
-                                      DataColumn(label: Text('Created On', style: TextStyle(fontWeight: FontWeight.bold, color: color))),
-                                      DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold, color: color))),
-                                    ],
-                                    rows: List.generate(
-                                      snapshot.data!.docs.length,
-                                      (index) {
-                                        final categoryData = snapshot.data!.docs[index];
-                                        final category = CategoryModel.fromFirestore(categoryData);
-                                        
-                                        return DataRow(
-                                          cells: [
-                                            DataCell(
-                                              Container(
-                                                width: 60,
-                                                height: 60,
-                                                padding: const EdgeInsets.all(4),
-                                                decoration: BoxDecoration(
-                                                  color: Colors.white,
-                                                  borderRadius: BorderRadius.circular(8),
-                                                  border: Border.all(color: Colors.grey.withOpacity(0.3)),
-                                                ),
-                                                child: ClipRRect(
-                                                  borderRadius: BorderRadius.circular(6),
-                                                  child: _buildCategoryImage(category.imageUrl, 52),
-                                                ),
-                                              ),
-                                            ),
-                                            DataCell(
-                                              Text(category.name, style: TextStyle(color: color)),
-                                            ),
-                                            DataCell(
-                                              Text(
-                                                '${category.createdAt.toDate().day}/${category.createdAt.toDate().month}/${category.createdAt.toDate().year}',
-                                                style: TextStyle(color: color),
-                                              ),
-                                            ),
-                                            DataCell(
-                                              Row(
-                                                children: [
-                                                  IconButton(
-                                                    onPressed: () {
-                                                      GlobalMethods.warningDialog(
-                                                        title: 'Delete ${category.name}?',
-                                                        subtitle: 'Do you want to delete this category?',
-                                                        fct: () {
-                                                          Navigator.pop(context);
-                                                          _deleteCategory(category.id);
-                                                        },
-                                                        context: context,
-                                                      );
-                                                    },
-                                                    icon: const Icon(
-                                                      Icons.delete,
-                                                      color: Colors.red,
+                                    const SizedBox(height: AppTheme.spacingLg),
+                                    
+                                    // Image Picker Section
+                                    Row(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        // Image Preview
+                                        Container(
+                                          width: 120,
+                                          height: 120,
+                                          child: _pickedImage != null && (kIsWeb ? webImage.isNotEmpty : true)
+                                              ? Container(
+                                                  decoration: BoxDecoration(
+                                                    borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                                                    border: Border.all(color: AppTheme.primaryColor, width: 2),
+                                                  ),
+                                                  child: ClipRRect(
+                                                    borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                                                    child: kIsWeb
+                                                        ? Image.memory(
+                                                            webImage,
+                                                            fit: BoxFit.cover,
+                                                            width: 120,
+                                                            height: 120,
+                                                          )
+                                                        : Image.file(
+                                                            _pickedImage!,
+                                                            fit: BoxFit.cover,
+                                                            width: 120,
+                                                            height: 120,
+                                                          ),
+                                                  ),
+                                                )
+                                              : DottedBorder(
+                                                  borderType: BorderType.RRect,
+                                                  radius: Radius.circular(AppTheme.radiusMd),
+                                                  dashPattern: const [6, 3],
+                                                  color: AppTheme.neutral400,
+                                                  strokeWidth: 2,
+                                                  child: Container(
+                                                    width: 120,
+                                                    height: 120,
+                                                    decoration: BoxDecoration(
+                                                      color: AppTheme.neutral100,
+                                                      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                                                    ),
+                                                    child: Column(
+                                                      mainAxisAlignment: MainAxisAlignment.center,
+                                                      children: [
+                                                        Icon(
+                                                          Icons.cloud_upload_outlined,
+                                                          size: 32,
+                                                          color: AppTheme.neutral500,
+                                                        ),
+                                                        const SizedBox(height: AppTheme.spacingSm),
+                                                        Text(
+                                                          'Upload Image',
+                                                          style: AppTheme.bodySmall.copyWith(
+                                                            color: AppTheme.neutral500,
+                                                          ),
+                                                        ),
+                                                      ],
                                                     ),
                                                   ),
+                                                ),
+                                        ),
+                                        
+                                        const SizedBox(width: AppTheme.spacingLg),
+                                        
+                                        // Form Fields
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              // Category Name Input
+                                              TextFormField(
+                                                controller: _categoryNameController,
+                                                decoration: InputDecoration(
+                                                  labelText: 'Category Name *',
+                                                  hintText: 'Enter category name',
+                                                  prefixIcon: const Icon(Icons.category),
+                                                  border: OutlineInputBorder(
+                                                    borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                                                  ),
+                                                  filled: true,
+                                                  fillColor: Theme.of(context).scaffoldBackgroundColor,
+                                                ),
+                                                validator: (value) {
+                                                  if (value == null || value.trim().isEmpty) {
+                                                    return 'Please enter a category name';
+                                                  }
+                                                  if (value.trim().length < 2) {
+                                                    return 'Category name must be at least 2 characters';
+                                                  }
+                                                  return null;
+                                                },
+                                              ),
+                                              
+                                              const SizedBox(height: AppTheme.spacingMd),
+                                              
+                                              // Image Upload Button
+                                              Row(
+                                                children: [
+                                                  ElevatedButton.icon(
+                                                    onPressed: _pickImage,
+                                                    icon: const Icon(Icons.image),
+                                                    label: Text(_pickedImage != null ? 'Change Image' : 'Select Image'),
+                                                    style: ElevatedButton.styleFrom(
+                                                      backgroundColor: AppTheme.secondaryColor,
+                                                      foregroundColor: Colors.white,
+                                                      padding: const EdgeInsets.symmetric(
+                                                        horizontal: AppTheme.spacingLg,
+                                                        vertical: AppTheme.spacingMd,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  if (_pickedImage != null) ...[
+                                                    const SizedBox(width: AppTheme.spacingMd),
+                                                    TextButton.icon(
+                                                      onPressed: () {
+                                                        setState(() {
+                                                          _pickedImage = null;
+                                                          webImage = Uint8List(8);
+                                                        });
+                                                      },
+                                                      icon: const Icon(Icons.clear),
+                                                      label: const Text('Remove'),
+                                                      style: TextButton.styleFrom(
+                                                        foregroundColor: Colors.red,
+                                                      ),
+                                                    ),
+                                                  ],
                                                 ],
                                               ),
-                                            ),
-                                          ],
-                                        );
-                                      },
+                                              
+                                              const SizedBox(height: AppTheme.spacingLg),
+                                              
+                                              // Add Button
+                                              SizedBox(
+                                                width: double.infinity,
+                                                child: ElevatedButton.icon(
+                                                  onPressed: _isLoading ? null : _addCategory,
+                                                  icon: _isLoading 
+                                                      ? const SizedBox(
+                                                          width: 16,
+                                                          height: 16,
+                                                          child: CircularProgressIndicator(strokeWidth: 2),
+                                                        )
+                                                      : const Icon(Icons.add),
+                                                  label: Text(_isLoading ? 'Adding...' : 'Add Category'),
+                                                  style: ElevatedButton.styleFrom(
+                                                    backgroundColor: AppTheme.primaryColor,
+                                                    foregroundColor: Colors.white,
+                                                    padding: const EdgeInsets.symmetric(
+                                                      vertical: AppTheme.spacingMd,
+                                                    ),
+                                                    shape: RoundedRectangleBorder(
+                                                      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
                                     ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            
+                            const SizedBox(height: AppTheme.spacingXl),
+                            
+                            // Categories List
+                            Container(
+                              padding: const EdgeInsets.all(AppTheme.spacingLg),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).cardColor,
+                                borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                                border: Border.all(color: Theme.of(context).dividerColor),
+                                boxShadow: AppTheme.shadowSm,
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Text(
+                                        'Available Categories',
+                                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      const Spacer(),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: AppTheme.spacingMd,
+                                          vertical: AppTheme.spacingSm,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: AppTheme.primaryColor.withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                                        ),
+                                        child: Text(
+                                          'Live Data',
+                                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                            color: AppTheme.primaryColor,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                );
-                              },
+                                  const SizedBox(height: AppTheme.spacingLg),
+                                  StreamBuilder<QuerySnapshot>(
+                                    stream: FirebaseFirestore.instance
+                                        .collection('categories')
+                                        .orderBy('createdAt', descending: true)
+                                        .snapshots(),
+                                    builder: (context, snapshot) {
+                                      if (snapshot.connectionState == ConnectionState.waiting) {
+                                        return const Center(child: CircularProgressIndicator());
+                                      } else if (snapshot.hasError) {
+                                        return Center(
+                                          child: Text(
+                                            'Error: ${snapshot.error}',
+                                            style: const TextStyle(color: Colors.red),
+                                          ),
+                                        );
+                                      } else if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                                        return Center(
+                                          child: Padding(
+                                            padding: const EdgeInsets.all(AppTheme.spacingXl),
+                                            child: Column(
+                                              children: [
+                                                Icon(
+                                                  Icons.category_outlined,
+                                                  size: 64,
+                                                  color: AppTheme.neutral400,
+                                                ),
+                                                const SizedBox(height: AppTheme.spacingMd),
+                                                Text(
+                                                  'No categories found',
+                                                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                                    color: AppTheme.neutral500,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: AppTheme.spacingSm),
+                                                Text(
+                                                  'Add your first category to get started!',
+                                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                                    color: AppTheme.neutral400,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        );
+                                      }
+
+                                      return _buildCategoriesGrid(snapshot.data!.docs);
+                                    },
+                                  ),
+                                ],
+                              ),
                             ),
                           ],
                         ),
                       ),
-                      const SizedBox(height: 20),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildCategoriesGrid(List<QueryDocumentSnapshot> docs) {
+    return Responsive(
+      mobile: GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 1,
+          childAspectRatio: 4,
+          crossAxisSpacing: AppTheme.spacingMd,
+          mainAxisSpacing: AppTheme.spacingMd,
+        ),
+        itemCount: docs.length,
+        itemBuilder: (context, index) => _buildCategoryCard(docs[index]),
+      ),
+      tablet: GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          childAspectRatio: 3,
+          crossAxisSpacing: AppTheme.spacingMd,
+          mainAxisSpacing: AppTheme.spacingMd,
+        ),
+        itemCount: docs.length,
+        itemBuilder: (context, index) => _buildCategoryCard(docs[index]),
+      ),
+      desktop: GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3,
+          childAspectRatio: 3,
+          crossAxisSpacing: AppTheme.spacingMd,
+          mainAxisSpacing: AppTheme.spacingMd,
+        ),
+        itemCount: docs.length,
+        itemBuilder: (context, index) => _buildCategoryCard(docs[index]),
+      ),
+    );
+  }
+
+  Widget _buildCategoryCard(QueryDocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    final name = data['name'] ?? 'Unknown';
+    final imageUrl = data['imageUrl'];
+    final createdAt = data['createdAt'] as Timestamp?;
+
+    return Container(
+      padding: const EdgeInsets.all(AppTheme.spacingMd),
+      decoration: BoxDecoration(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        border: Border.all(color: Theme.of(context).dividerColor),
+      ),
+      child: Row(
+        children: [
+          _buildCategoryImage(imageUrl, 60),
+          const SizedBox(width: AppTheme.spacingMd),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  name,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (createdAt != null) ...[
+                  const SizedBox(height: AppTheme.spacingXs),
+                  Text(
+                    'Created: ${createdAt.toDate().toString().split(' ')[0]}',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppTheme.neutral500,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          IconButton(
+            onPressed: () => _deleteCategory(doc.id, name),
+            icon: const Icon(Icons.delete),
+            color: Colors.red,
+            tooltip: 'Delete Category',
+          ),
+        ],
       ),
     );
   }

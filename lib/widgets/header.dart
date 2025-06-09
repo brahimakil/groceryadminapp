@@ -2,477 +2,580 @@ import 'package:flutter/material.dart';
 import 'package:grocery_admin_panel/themes/app_theme.dart';
 import 'package:grocery_admin_panel/providers/dark_theme_provider.dart';
 import 'package:provider/provider.dart';
-
-import '../responsive.dart';
+import 'package:grocery_admin_panel/responsive.dart';
+import 'package:grocery_admin_panel/services/search_service.dart';
+import 'package:grocery_admin_panel/widgets/search_overlay.dart';
+import 'package:grocery_admin_panel/inner_screens/edit_prod.dart';
+import 'package:grocery_admin_panel/inner_screens/categories_screen.dart';
+import 'package:grocery_admin_panel/inner_screens/all_orders_screen.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class Header extends StatefulWidget {
   const Header({
     Key? key,
-    required this.title,
     required this.fct,
-    this.showSearchField = true,
+    required this.title,
+    this.showTextField = true,
   }) : super(key: key);
   
-  final String title;
   final Function fct;
-  final bool showSearchField;
+  final String title;
+  final bool showTextField;
 
   @override
   State<Header> createState() => _HeaderState();
 }
 
 class _HeaderState extends State<Header> with TickerProviderStateMixin {
-  late AnimationController _animationController;
-  late Animation<double> _slideAnimation;
+  late AnimationController _slideAnimController;
+  late AnimationController _searchAnimController;
+  late Animation<Offset> _slideAnimation;
+  late Animation<double> _searchAnimation;
+  
   final TextEditingController _searchController = TextEditingController();
-  bool _isSearchFocused = false;
+  final FocusNode _searchFocusNode = FocusNode();
+  bool _isSearching = false;
+  bool _showSearchOverlay = false;
+  String _currentQuery = '';
+  OverlayEntry? _overlayEntry;
 
   @override
   void initState() {
     super.initState();
-    _animationController = AnimationController(
-      duration: const Duration(milliseconds: 500),
+    _slideAnimController = AnimationController(
+      duration: const Duration(milliseconds: 300),
       vsync: this,
     );
-    _slideAnimation = Tween<double>(begin: -50.0, end: 0.0).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeOutBack),
+    _searchAnimController = AnimationController(
+      duration: const Duration(milliseconds: 200),
+      vsync: this,
     );
-    _animationController.forward();
+
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0.0, -1.0),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _slideAnimController,
+      curve: Curves.easeOutCubic,
+    ));
+
+    _searchAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _searchAnimController,
+      curve: Curves.easeOut,
+    ));
+
+    _slideAnimController.forward();
+
+    _searchFocusNode.addListener(() {
+      if (!_searchFocusNode.hasFocus) {
+        _hideSearchResults();
+      }
+    });
   }
 
   @override
   void dispose() {
-    _animationController.dispose();
+    _slideAnimController.dispose();
+    _searchAnimController.dispose();
     _searchController.dispose();
+    _searchFocusNode.dispose();
+    _removeOverlay();
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Provider.of<DarkThemeProvider>(context).darkTheme;
-    final isMobile = Responsive.isMobile(context);
-    final isTablet = Responsive.isTablet(context);
+  void _showSearchResults() {
+    if (_overlayEntry != null) return;
 
-    return AnimatedBuilder(
-      animation: _slideAnimation,
-      builder: (context, child) {
-        return Transform.translate(
-          offset: Offset(0, _slideAnimation.value),
-          child: Container(
-            padding: EdgeInsets.symmetric(
-              horizontal: isMobile ? AppTheme.spacingMd : AppTheme.spacingLg,
-              vertical: AppTheme.spacingMd,
-            ),
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardColor,
-              border: Border(
-                bottom: BorderSide(
-                  color: isDark ? AppTheme.neutral700 : AppTheme.neutral200,
-                  width: 1,
+    setState(() {
+      _showSearchOverlay = true;
+    });
+    _searchAnimController.forward();
+
+    _overlayEntry = OverlayEntry(
+      builder: (context) => GestureDetector(
+        onTap: _hideSearchResults,
+        child: Material(
+          color: Colors.black.withOpacity(0.1),
+          child: Stack(
+            children: [
+              Positioned(
+                top: Responsive.isMobile(context) ? 120 : 80,
+                left: Responsive.isMobile(context) ? 16 : 20,
+                right: 20,
+                child: SearchOverlay(
+                  query: _currentQuery,
+                  onClose: _hideSearchResults,
+                  onResultTap: _handleSearchResultTap,
                 ),
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: (isDark ? Colors.black : Colors.grey).withOpacity(0.1),
-                  blurRadius: 10,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                // Mobile Menu Button
-                if (!Responsive.isDesktop(context))
-                  Container(
-                    margin: const EdgeInsets.only(right: AppTheme.spacingMd),
-                    decoration: BoxDecoration(
-                      gradient: AppTheme.primaryGradient,
-                      borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                      boxShadow: AppTheme.shadowSm,
-                    ),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: () => widget.fct(),
-                        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                      child: Container(
-                          padding: const EdgeInsets.all(AppTheme.spacingMd),
-                          child: const Icon(
-                            Icons.menu_rounded,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                // Title Section
-                Expanded(
-                  flex: isMobile ? 2 : 1,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        widget.title,
-                        style: (isMobile 
-                          ? AppTheme.headlineSmall 
-                          : AppTheme.headlineMedium
-                        ).copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).textTheme.bodyLarge!.color,
-                        ),
-                      ),
-                      if (!isMobile) ...[
-                        const SizedBox(height: AppTheme.spacingXs),
-                        Text(
-                          _getSubtitle(),
-                          style: AppTheme.bodySmall.copyWith(
-                            color: isDark ? AppTheme.neutral400 : AppTheme.neutral500,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-
-                // Search Field
-                if (widget.showSearchField && !isMobile)
-                  Expanded(
-                    flex: 2,
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(horizontal: AppTheme.spacingLg),
-                      child: _buildSearchField(isDark),
-                    ),
-                  ),
-
-                // Action Buttons
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Search Button for Mobile
-                    if (widget.showSearchField && isMobile)
-                      _buildActionButton(
-                        icon: Icons.search_rounded,
-                        onTap: () => _showMobileSearch(context),
-                        gradient: AppTheme.secondaryGradient,
-                      ),
-
-                    if (!isMobile) const SizedBox(width: AppTheme.spacingSm),
-
-                    // Notifications
-                    _buildActionButton(
-                      icon: Icons.notifications_rounded,
-                      onTap: () => _showNotifications(context),
-                      gradient: AppTheme.warningGradient,
-                      badge: '3',
-                    ),
-
-                    const SizedBox(width: AppTheme.spacingSm),
-
-                    // Profile
-                    _buildProfileSection(isDark, isMobile),
-                  ],
-                ),
-              ],
-            ),
+            ],
           ),
-        );
-      },
+        ),
+      ),
     );
+
+    Overlay.of(context).insert(_overlayEntry!);
   }
 
-  Widget _buildSearchField(bool isDark) {
-    return Focus(
-      onFocusChange: (focused) {
+  void _hideSearchResults() {
+    if (_overlayEntry == null) return;
+
+    _searchAnimController.reverse().then((_) {
+      _removeOverlay();
+      if (mounted) {
         setState(() {
-          _isSearchFocused = focused;
+          _showSearchOverlay = false;
         });
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        decoration: BoxDecoration(
-          color: isDark ? AppTheme.neutral700 : AppTheme.neutral100,
-          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-          border: Border.all(
-            color: _isSearchFocused 
-              ? AppTheme.primaryColor 
-              : (isDark ? AppTheme.neutral600 : AppTheme.neutral200),
-            width: _isSearchFocused ? 2 : 1,
-          ),
-          boxShadow: _isSearchFocused ? AppTheme.shadowSm : null,
-        ),
-        child: TextField(
-          controller: _searchController,
-          decoration: InputDecoration(
-            hintText: 'Search products, orders, categories...',
-            hintStyle: AppTheme.bodyMedium.copyWith(
-              color: isDark ? AppTheme.neutral400 : AppTheme.neutral500,
+      }
+    });
+  }
+
+  void _removeOverlay() {
+    _overlayEntry?.remove();
+    _overlayEntry = null;
+  }
+
+  void _handleSearchResultTap(SearchResult result) {
+    _hideSearchResults();
+    _searchFocusNode.unfocus();
+    
+    // Add a small delay to ensure overlay is properly disposed
+    Future.delayed(const Duration(milliseconds: 100), () {
+      _navigateToResult(result);
+    });
+  }
+
+  void _navigateToResult(SearchResult result) {
+    try {
+      switch (result.type) {
+        case 'product':
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => EditProductScreen(
+                id: result.id,
+                title: result.data['title'] ?? 'Unnamed Product',
+                price: result.data['price']?.toString() ?? '0',
+                categoryName: result.data['categoryName'] ?? '',
+                imageUrl: result.data['imageUrl'] ?? '',
+                description: result.data['description'] ?? '',
+                nutrients: result.data['nutrients'] ?? '',
+                calories: result.data['calories'] ?? 0,
+              ),
             ),
-            prefixIcon: Container(
-              padding: const EdgeInsets.all(AppTheme.spacingSm),
+          ).catchError((error) {
+            print('Navigation error: $error');
+            _showSimpleDialog('Product', 'Could not open product for editing: ${result.title}');
+          });
+          break;
+        case 'order':
+          _showOrderDetailsDialog(result);
+          break;
+        case 'category':
+          Navigator.pushNamed(context, CategoriesScreen.routeName).then((_) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Looking for category: ${result.title}'),
+                duration: const Duration(seconds: 3),
+                backgroundColor: AppTheme.secondaryColor,
+              ),
+            );
+          }).catchError((error) {
+            print('Navigation error: $error');
+            _showSimpleDialog('Category', 'Could not open categories screen');
+          });
+          break;
+      }
+    } catch (e) {
+      print('Navigation error: $e');
+      _showSimpleDialog('Error', 'Could not navigate to ${result.type}: ${result.title}');
+    }
+  }
+
+  void _showOrderDetailsDialog(SearchResult result) {
+    final orderData = result.data;
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppTheme.warningColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+              ),
               child: Icon(
-                Icons.search_rounded,
-                color: _isSearchFocused 
-                  ? AppTheme.primaryColor 
-                  : (isDark ? AppTheme.neutral400 : AppTheme.neutral500),
+                Icons.receipt_long_outlined,
+                color: AppTheme.warningColor,
                 size: 20,
               ),
             ),
-            suffixIcon: _searchController.text.isNotEmpty
-              ? IconButton(
-                  onPressed: () {
-                    _searchController.clear();
-                    setState(() {});
-                  },
-                  icon: Icon(
-                    Icons.clear_rounded,
-                    color: isDark ? AppTheme.neutral400 : AppTheme.neutral500,
-                    size: 20,
-                  ),
-                )
-              : null,
-            border: InputBorder.none,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: AppTheme.spacingMd,
-              vertical: AppTheme.spacingMd,
-            ),
-          ),
-          onChanged: (value) => setState(() {}),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildActionButton({
-    required IconData icon,
-    required VoidCallback onTap,
-    required LinearGradient gradient,
-    String? badge,
-  }) {
-    return Stack(
-      children: [
-        Container(
-          decoration: BoxDecoration(
-            gradient: gradient,
-            borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-            boxShadow: AppTheme.shadowSm,
-          ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: onTap,
-              borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-              child: Container(
-                padding: const EdgeInsets.all(AppTheme.spacingMd),
-                child: Icon(
-                  icon,
-                  color: Colors.white,
-                  size: 20,
-                ),
-              ),
-            ),
-          ),
-        ),
-        if (badge != null)
-          Positioned(
-            right: 0,
-            top: 0,
-            child: Container(
-              padding: const EdgeInsets.all(4),
-              decoration: const BoxDecoration(
-                color: AppTheme.errorColor,
-                shape: BoxShape.circle,
-              ),
-              constraints: const BoxConstraints(
-                minWidth: 16,
-                minHeight: 16,
-              ),
+            const SizedBox(width: AppTheme.spacingMd),
+            Expanded(
               child: Text(
-                badge,
-                style: AppTheme.labelSmall.copyWith(
-                  color: Colors.white,
-                  fontSize: 10,
-                ),
-                textAlign: TextAlign.center,
-                  ),
+                'Order Details',
+                style: AppTheme.titleLarge.copyWith(
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-      ],
-    );
-  }
-
-  Widget _buildProfileSection(bool isDark, bool isMobile) {
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: isMobile ? AppTheme.spacingSm : AppTheme.spacingMd,
-        vertical: AppTheme.spacingSm,
-      ),
-      decoration: BoxDecoration(
-        color: isDark ? AppTheme.neutral700 : AppTheme.neutral100,
-        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-        border: Border.all(
-          color: isDark ? AppTheme.neutral600 : AppTheme.neutral200,
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: isMobile ? 32 : 36,
-            height: isMobile ? 32 : 36,
-            decoration: BoxDecoration(
-              gradient: AppTheme.primaryGradient,
-              shape: BoxShape.circle,
-              boxShadow: AppTheme.shadowSm,
-            ),
-            child: Icon(
-              Icons.person_rounded,
-              color: Colors.white,
-              size: isMobile ? 16 : 18,
-            ),
-          ),
-          if (!isMobile) ...[
-            const SizedBox(width: AppTheme.spacingSm),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Admin',
-                  style: AppTheme.bodyMedium.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                Text(
-                  'Online',
-                  style: AppTheme.bodySmall.copyWith(
-                    color: AppTheme.successColor,
-                    fontSize: 10,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(width: AppTheme.spacingSm),
-            Icon(
-              Icons.keyboard_arrow_down_rounded,
-              color: isDark ? AppTheme.neutral400 : AppTheme.neutral500,
-              size: 16,
             ),
           ],
+        ),
+        content: Container(
+          width: Responsive.isMobile(context) ? double.maxFinite : 400,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildOrderDetailRow('Order ID', result.id.substring(0, 12) + '...'),
+              _buildOrderDetailRow('Customer', orderData['userName'] ?? 'Unknown'),
+              _buildOrderDetailRow('Email', orderData['userEmail'] ?? 'N/A'),
+              _buildOrderDetailRow('Status', orderData['orderStatus'] ?? 'Pending'),
+              _buildOrderDetailRow('Total Price', '\$${(orderData['totalPrice'] ?? 0).toStringAsFixed(2)}'),
+              _buildOrderDetailRow('Product Count', '${orderData['productCount'] ?? 0} items'),
+              if (orderData['orderDate'] != null)
+                _buildOrderDetailRow('Order Date', _formatOrderDate(orderData['orderDate'])),
+              const SizedBox(height: AppTheme.spacingMd),
+              Container(
+                padding: const EdgeInsets.all(AppTheme.spacingMd),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                ),
+                child: Row(
+      children: [
+                    Icon(
+                      Icons.info_outline,
+                      color: AppTheme.primaryColor,
+                      size: 16,
+                    ),
+                    const SizedBox(width: AppTheme.spacingSm),
+                    Expanded(
+                      child: Text(
+                        'To manage this order, go to Orders section',
+                        style: AppTheme.bodySmall.copyWith(
+                          color: AppTheme.primaryColor,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            style: TextButton.styleFrom(
+              foregroundColor: AppTheme.neutral600,
+            ),
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryColor,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              Navigator.of(context).pop();
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const AllOrdersScreen(),
+                ),
+              );
+            },
+            child: const Text('View All Orders'),
+          ),
         ],
       ),
     );
   }
 
-  String _getSubtitle() {
-    final now = DateTime.now();
-    final hour = now.hour;
-    String greeting;
-    
-    if (hour < 12) {
-      greeting = 'Good morning';
-    } else if (hour < 17) {
-      greeting = 'Good afternoon';
-    } else {
-      greeting = 'Good evening';
-    }
-    
-    return '$greeting! Here\'s what\'s happening today.';
-  }
-
-  void _showMobileSearch(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.9,
-        decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(AppTheme.radius2Xl),
-            topRight: Radius.circular(AppTheme.radius2Xl),
+  Widget _buildOrderDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppTheme.spacingSm),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(
+              '$label:',
+              style: AppTheme.bodyMedium.copyWith(
+                fontWeight: FontWeight.w600,
+                color: AppTheme.neutral600,
+              ),
+            ),
           ),
-        ),
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(AppTheme.spacingLg),
-              child: Column(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: AppTheme.neutral300,
-                      borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                    ),
-                  ),
-                  const SizedBox(height: AppTheme.spacingLg),
-                  _buildSearchField(Provider.of<DarkThemeProvider>(context).darkTheme),
-                ],
-              ),
+          Expanded(
+            child: Text(
+              value,
+              style: AppTheme.bodyMedium,
             ),
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(AppTheme.spacingLg),
-                child: const Center(
-                  child: Text('Search functionality coming soon...'),
-                ),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  void _showNotifications(BuildContext context) {
-    showModalBottomSheet(
+  String _formatOrderDate(dynamic orderDate) {
+    try {
+      if (orderDate is Timestamp) {
+        final date = orderDate.toDate();
+        return '${date.day}/${date.month}/${date.year} at ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+      }
+      return 'Unknown date';
+    } catch (e) {
+      return 'Unknown date';
+    }
+  }
+
+  void _showSimpleDialog(String title, String message) {
+    if (!mounted) return;
+    
+    showDialog(
       context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        height: 400,
-        decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(AppTheme.radius2Xl),
-            topRight: Radius.circular(AppTheme.radius2Xl),
-          ),
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
         ),
-        child: Column(
+        title: Row(
           children: [
-            Container(
-              padding: const EdgeInsets.all(AppTheme.spacingLg),
-              child: Column(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: AppTheme.neutral300,
-                      borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                    ),
-                  ),
-                  const SizedBox(height: AppTheme.spacingLg),
-                  Text(
-                    'Notifications',
-                    style: AppTheme.headlineSmall.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
+            Icon(
+              Icons.error_outline,
+              color: AppTheme.errorColor,
+            ),
+            const SizedBox(width: AppTheme.spacingMd),
+            Text(
+              title,
+              style: AppTheme.titleLarge.copyWith(
+                fontWeight: FontWeight.w600,
               ),
             ),
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(AppTheme.spacingLg),
-                child: const Center(
-                  child: Text('No new notifications'),
+          ],
+        ),
+        content: Text(
+          message,
+          style: AppTheme.bodyMedium,
+        ),
+        actions: [
+          TextButton(
+            style: TextButton.styleFrom(
+              foregroundColor: AppTheme.primaryColor,
+            ),
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SlideTransition(
+      position: _slideAnimation,
+        child: Container(
+        margin: const EdgeInsets.all(AppTheme.spacingLg),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppTheme.spacingLg,
+          vertical: AppTheme.spacingMd,
+        ),
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+          boxShadow: AppTheme.shadowSm,
+          border: Border.all(
+            color: Theme.of(context).dividerColor.withOpacity(0.5),
+          ),
+        ),
+        child: Row(
+      children: [
+        if (!Responsive.isDesktop(context))
+              Container(
+                margin: const EdgeInsets.only(right: AppTheme.spacingMd),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                ),
+                child: IconButton(
+                  icon: Icon(
+                    Icons.menu_rounded,
+                    color: AppTheme.primaryColor,
+                  ),
+                  onPressed: () => widget.fct(),
+                  tooltip: 'Open Menu',
                 ),
               ),
+            
+        if (Responsive.isDesktop(context))
+              Expanded(
+                flex: 2,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.title,
+                      style: AppTheme.headingMedium.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      'Manage your grocery store',
+                      style: AppTheme.bodySmall.copyWith(
+                        color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.6),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+            if (widget.showTextField)
+              Expanded(
+                flex: Responsive.isDesktop(context) ? 3 : 4,
+                      child: Container(
+                  margin: EdgeInsets.only(
+                    left: Responsive.isDesktop(context) ? AppTheme.spacingLg : 0,
+                    right: AppTheme.spacingMd,
+                  ),
+                  child: AnimatedBuilder(
+                    animation: _searchAnimation,
+                    builder: (context, child) {
+                      return Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                          border: Border.all(
+                            color: _searchFocusNode.hasFocus
+                                ? AppTheme.primaryColor
+                                : Theme.of(context).dividerColor.withOpacity(0.5),
+                            width: _searchFocusNode.hasFocus ? 2 : 1,
+                          ),
+                          color: Theme.of(context).scaffoldBackgroundColor,
+                        ),
+                        child: TextField(
+                          controller: _searchController,
+                          focusNode: _searchFocusNode,
+                          onChanged: (value) {
+                            setState(() {
+                              _currentQuery = value;
+                              _isSearching = value.isNotEmpty;
+                            });
+                            
+                            if (_currentQuery.isNotEmpty && _searchFocusNode.hasFocus) {
+                              if (_showSearchOverlay) {
+                                _removeOverlay();
+                              }
+                              Future.delayed(const Duration(milliseconds: 50), () {
+                                if (_searchFocusNode.hasFocus) {
+                                  _showSearchResults();
+                                }
+                              });
+                            } else {
+                              _hideSearchResults();
+                            }
+                          },
+                          onTap: () {
+                            if (_currentQuery.isNotEmpty) {
+                              _showSearchResults();
+                            }
+                          },
+                          decoration: InputDecoration(
+                            hintText: 'Search products, orders, categories...',
+                            hintStyle: AppTheme.bodyMedium.copyWith(
+                              color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5),
+                            ),
+                            prefixIcon: Icon(
+                              Icons.search_rounded,
+                              color: _searchFocusNode.hasFocus 
+                                  ? AppTheme.primaryColor 
+                                  : Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5),
+                            ),
+                            suffixIcon: _currentQuery.isNotEmpty
+                                ? IconButton(
+                                    icon: Icon(
+                                      Icons.clear_rounded,
+                                      color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5),
+                                    ),
+                                    onPressed: () {
+                                      _searchController.clear();
+                                      setState(() {
+                                        _currentQuery = '';
+                                        _isSearching = false;
+                                      });
+                                      _hideSearchResults();
+                                    },
+                                  )
+                                : null,
+                            border: InputBorder.none,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: AppTheme.spacingMd,
+                              vertical: AppTheme.spacingMd,
+                        ),
+                      ),
+                    ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+
+            // Action buttons
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppTheme.warningColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                  ),
+                  child: IconButton(
+                    icon: Icon(
+                      Icons.notifications_outlined,
+                      color: AppTheme.warningColor,
+                    ),
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: const Text('Notifications feature coming soon!'),
+                          backgroundColor: AppTheme.warningColor,
+                        ),
+                      );
+                    },
+                    tooltip: 'Notifications',
+                  ),
+                ),
+                const SizedBox(width: AppTheme.spacingMd),
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppTheme.successColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                  ),
+                  child: IconButton(
+                    icon: Icon(
+                      Icons.account_circle_outlined,
+                      color: AppTheme.successColor,
+                    ),
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: const Text('User profile feature coming soon!'),
+                          backgroundColor: AppTheme.successColor,
+                        ),
+                      );
+                    },
+                    tooltip: 'User Profile',
+                  ),
+                ),
+              ],
             ),
           ],
         ),

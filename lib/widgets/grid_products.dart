@@ -7,16 +7,23 @@ import '../consts/constants.dart';
 import 'products_widget.dart';
 import 'text_widget.dart';
 
-class ProductGridWidget extends StatelessWidget {
-  const ProductGridWidget(
-      {Key? key,
-      this.crossAxisCount = 4,
-      this.childAspectRatio = 1,
-      this.isInMain = true})
-      : super(key: key);
+class ProductGridWidget extends StatefulWidget {
+  const ProductGridWidget({
+    Key? key,
+    this.crossAxisCount = 4,
+    this.childAspectRatio = 1,
+    this.isInMain = true,
+  }) : super(key: key);
+  
   final int crossAxisCount;
   final double childAspectRatio;
   final bool isInMain;
+
+  @override
+  State<ProductGridWidget> createState() => _ProductGridWidgetState();
+}
+
+class _ProductGridWidgetState extends State<ProductGridWidget> {
   @override
   Widget build(BuildContext context) {
     final Color color = Utils(context).color;
@@ -40,7 +47,7 @@ class ProductGridWidget extends StatelessWidget {
                 const SizedBox(height: 8),
                 ElevatedButton(
                   onPressed: () {
-                    FirebaseFirestore.instance.collection('products').snapshots();
+                    setState(() {}); // Trigger rebuild
                   },
                   child: const Text("Retry"),
                 ),
@@ -57,16 +64,16 @@ class ProductGridWidget extends StatelessWidget {
         }
         
         return Container(
-          height: isInMain ? 450 : MediaQuery.of(context).size.height - 100,
+          height: widget.isInMain ? 450 : MediaQuery.of(context).size.height - 100,
           child: GridView.builder(
             physics: const AlwaysScrollableScrollPhysics(),
             shrinkWrap: true,
-            itemCount: isInMain && snapshot.data!.docs.length > 4
+            itemCount: widget.isInMain && snapshot.data!.docs.length > 4
                 ? 4
                 : snapshot.data!.docs.length,
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: crossAxisCount,
-              childAspectRatio: childAspectRatio * 1.1,
+              crossAxisCount: widget.crossAxisCount,
+              childAspectRatio: widget.childAspectRatio * 1.1,
               crossAxisSpacing: defaultPadding,
               mainAxisSpacing: defaultPadding,
             ),
@@ -80,7 +87,7 @@ class ProductGridWidget extends StatelessWidget {
                 id: productId, // Use the actual document ID
                 title: productData['title'] ?? 'No Title',
                 price: (productData['price'] ?? 0.0).toString(), // Handle potential type difference
-                imageUrl: productData['imageUrl'], // Already handles null
+                imageUrl: productData['imageUrl'] ?? '', // Handle null properly
                 isOnSale: productData['isOnSale'] ?? false,
                 salePrice: (productData['salePrice'] ?? 0.0), // Handle null and ensure double
                 // Data needed for editing:
@@ -88,8 +95,12 @@ class ProductGridWidget extends StatelessWidget {
                 description: productData['description'] ?? '',
                 nutrients: productData['nutrients'] ?? '',
                 calories: productData['calories'] ?? 0,
-                // isPiece is needed for display logic if you re-add it
-                // isPiece: productData['isPiece'] ?? false,
+                // Add callback for when product is deleted
+                onDeleted: () {
+                  // The StreamBuilder will automatically refresh the list
+                  // But we can add additional feedback here if needed
+                  print('Product $productId deleted - grid will refresh automatically');
+                },
               );
             },
           ),

@@ -26,12 +26,14 @@ class ProductWidget extends StatefulWidget {
     required this.description,
     required this.nutrients,
     required this.calories,
+    this.onDeleted,
   }) : super(key: key);
 
   final String id, title, price, imageUrl, categoryName, description, nutrients;
   final bool isOnSale;
   final double salePrice;
   final int calories;
+  final VoidCallback? onDeleted;
 
   @override
   State<ProductWidget> createState() => _ProductWidgetState();
@@ -42,6 +44,7 @@ class _ProductWidgetState extends State<ProductWidget> with TickerProviderStateM
   late Animation<double> _scaleAnimation;
   late Animation<double> _elevationAnimation;
   bool _isHovered = false;
+  bool _isDeleting = false;
 
   @override
   void initState() {
@@ -165,9 +168,9 @@ class _ProductWidgetState extends State<ProductWidget> with TickerProviderStateM
                                 ),
                                 const SizedBox(height: AppTheme.spacingSm),
                                 _buildActionButton(
-                                  icon: Icons.delete_rounded,
+                                  icon: _isDeleting ? Icons.hourglass_empty : Icons.delete_rounded,
                                   gradient: AppTheme.errorGradient,
-                                  onTap: () => _deleteProduct(context),
+                                  onTap: _isDeleting ? null : () => _deleteProduct(context),
                                 ),
                               ],
                             ),
@@ -358,7 +361,7 @@ class _ProductWidgetState extends State<ProductWidget> with TickerProviderStateM
   Widget _buildActionButton({
     required IconData icon,
     required LinearGradient gradient,
-    required VoidCallback onTap,
+    required VoidCallback? onTap,
   }) {
     return Container(
       width: 32,
@@ -407,34 +410,196 @@ class _ProductWidgetState extends State<ProductWidget> with TickerProviderStateM
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppTheme.radiusLg),
         ),
-        title: Text(
-          'Delete Product',
-          style: AppTheme.headlineSmall.copyWith(
-            fontWeight: FontWeight.bold,
-          ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppTheme.errorColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+              ),
+              child: Icon(
+                Icons.delete_forever_rounded,
+                color: AppTheme.errorColor,
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: AppTheme.spacingMd),
+            Expanded(
+              child: Text(
+                'Delete Product',
+                style: AppTheme.headlineSmall.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
         ),
-        content: Text(
-          'Are you sure you want to delete "${widget.title}"? This action cannot be undone.',
-          style: AppTheme.bodyMedium,
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Are you sure you want to delete this product?',
+              style: AppTheme.bodyLarge.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: AppTheme.spacingSm),
+            Container(
+              padding: const EdgeInsets.all(AppTheme.spacingMd),
+              decoration: BoxDecoration(
+                color: AppTheme.errorColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                border: Border.all(
+                  color: AppTheme.errorColor.withOpacity(0.3),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.warning_rounded,
+                    color: AppTheme.errorColor,
+                    size: 20,
+                  ),
+                  const SizedBox(width: AppTheme.spacingSm),
+                  Expanded(
+                    child: Text(
+                      '${widget.title}\nThis action cannot be undone.',
+                      style: AppTheme.bodyMedium.copyWith(
+                        color: AppTheme.errorColor,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
+            style: TextButton.styleFrom(
+              foregroundColor: AppTheme.neutral600,
+            ),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.of(context).pop();
-              // Add delete functionality here
+              await _performDelete(context);
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.errorColor,
+              foregroundColor: Colors.white,
             ),
-            child: const Text('Delete'),
+            child: const Text('Delete Product'),
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _performDelete(BuildContext context) async {
+    setState(() {
+      _isDeleting = true;
+    });
+
+    try {
+      // Show loading indicator
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2,
+                  ),
+                ),
+                const SizedBox(width: AppTheme.spacingMd),
+                Text('Deleting ${widget.title}...'),
+              ],
+            ),
+            backgroundColor: AppTheme.warningColor,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+
+      // Delete from Firestore
+      await FirebaseFirestore.instance
+          .collection('products')
+          .doc(widget.id)
+          .delete();
+
+      // Show success message
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(
+                  Icons.check_circle_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+                const SizedBox(width: AppTheme.spacingMd),
+                Expanded(
+                  child: Text('${widget.title} deleted successfully!'),
+                ),
+              ],
+            ),
+            backgroundColor: AppTheme.successColor,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+
+      // Call the onDeleted callback to refresh the parent widget
+      widget.onDeleted?.call();
+
+    } catch (e) {
+      // Show error message
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(
+                  Icons.error_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+                const SizedBox(width: AppTheme.spacingMd),
+                Expanded(
+                  child: Text('Failed to delete product: ${e.toString()}'),
+                ),
+              ],
+            ),
+            backgroundColor: AppTheme.errorColor,
+            duration: const Duration(seconds: 4),
+            action: SnackBarAction(
+              label: 'Retry',
+              textColor: Colors.white,
+              onPressed: () => _deleteProduct(context),
+            ),
+          ),
+        );
+      }
+      print('Delete error: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isDeleting = false;
+        });
+      }
+    }
   }
 }
 

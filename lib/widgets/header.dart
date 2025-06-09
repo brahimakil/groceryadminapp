@@ -537,21 +537,7 @@ class _HeaderState extends State<Header> with TickerProviderStateMixin {
                     color: AppTheme.warningColor.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                   ),
-                  child: IconButton(
-                    icon: Icon(
-                      Icons.notifications_outlined,
-                      color: AppTheme.warningColor,
-                    ),
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: const Text('Notifications feature coming soon!'),
-                          backgroundColor: AppTheme.warningColor,
-                        ),
-                      );
-                    },
-                    tooltip: 'Notifications',
-                  ),
+                 
                 ),
                 const SizedBox(width: AppTheme.spacingMd),
                 Container(
@@ -559,21 +545,7 @@ class _HeaderState extends State<Header> with TickerProviderStateMixin {
                     color: AppTheme.successColor.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                   ),
-                  child: IconButton(
-                    icon: Icon(
-                      Icons.account_circle_outlined,
-                      color: AppTheme.successColor,
-                    ),
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: const Text('User profile feature coming soon!'),
-                          backgroundColor: AppTheme.successColor,
-                        ),
-                      );
-                    },
-                    tooltip: 'User Profile',
-                  ),
+                 
                 ),
               ],
             ),

@@ -8,6 +8,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../controllers/MenuController.dart' as grocery;
+import '../inner_screens/all_orders_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
@@ -734,6 +735,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildCategoryPieChart() {
+    // Generate a wider palette of colors for categories
+    final List<Color> categoryColors = [
+      AppTheme.primaryColor,
+      AppTheme.secondaryColor,
+      AppTheme.warningColor,
+      AppTheme.successColor,
+      AppTheme.errorColor,
+      AppTheme.accentColor,
+      AppTheme.infoColor,
+      Colors.purple,
+      Colors.teal,
+      Colors.brown,
+      Colors.deepOrange,
+      Colors.indigo,
+      Colors.lime,
+      Colors.lightBlue,
+      Colors.pink.shade300,
+      Colors.green.shade300,
+    ];
+
+    // Debug: Print category distribution data
+    print('Category Distribution Data: $categoryDistribution');
+
     return Container(
       padding: const EdgeInsets.all(AppTheme.spacingLg),
       decoration: BoxDecoration(
@@ -780,78 +804,96 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         flex: 2,
                         child: PieChart(
                           PieChartData(
-                            sections: categoryDistribution.take(6).map((category) {
+                            sections: categoryDistribution.map((category) {
                               final index = categoryDistribution.indexOf(category);
-                              final colors = [
-                                AppTheme.primaryColor,
-                                AppTheme.secondaryColor,
-                                AppTheme.warningColor,
-                                AppTheme.successColor,
-                                AppTheme.errorColor,
-                                AppTheme.accentColor,
-                              ];
+                              final categoryName = (category['name'] as String?) ?? 'Unknown';
+                              final count = (category['count'] as num?)?.toInt() ?? 0;
+                              
+                              print('Creating section for category: $categoryName with count: $count');
+                              
                               return PieChartSectionData(
-                                color: colors[index % colors.length],
-                                value: (category['count'] as num?)?.toDouble() ?? 0,
-                                title: '${(category['count'] as num?)?.toInt() ?? 0}',
-                                radius: 60,
+                                color: categoryColors[index % categoryColors.length],
+                                value: count.toDouble(),
+                                title: '$count',
                                 titleStyle: const TextStyle(
-                                  fontSize: 12,
+                                  fontSize: 11,
                                   fontWeight: FontWeight.bold,
                                   color: Colors.white,
                                 ),
+                                radius: 60,
+                                showTitle: true,
+                                borderSide: const BorderSide(width: 1, color: Colors.white),
                               );
                             }).toList(),
                             sectionsSpace: 2,
                             centerSpaceRadius: 40,
+                            pieTouchData: PieTouchData(
+                              enabled: true,
+                              touchCallback: (FlTouchEvent event, pieTouchResponse) {
+                                if (event.isInterestedForInteractions &&
+                                    pieTouchResponse != null &&
+                                    pieTouchResponse.touchedSection != null) {
+                                  final touchedIndex = pieTouchResponse.touchedSection!.touchedSectionIndex;
+                                  if (touchedIndex >= 0 && touchedIndex < categoryDistribution.length) {
+                                    final category = categoryDistribution[touchedIndex];
+                                    print('Touched category: ${category['name']} with ${category['count']} products');
+                                  }
+                                }
+                              },
+                            ),
                           ),
                         ),
                       ),
                       const SizedBox(width: AppTheme.spacingMd),
                       Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            ...categoryDistribution.take(6).map((category) {
-                              final index = categoryDistribution.indexOf(category);
-                              final colors = [
-                                AppTheme.primaryColor,
-                                AppTheme.secondaryColor,
-                                AppTheme.warningColor,
-                                AppTheme.successColor,
-                                AppTheme.errorColor,
-                                AppTheme.accentColor,
-                              ];
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: AppTheme.spacingSm),
-                                child: Row(
-                                  children: [
-                                    Container(
-                                      width: 12,
-                                      height: 12,
-                                      decoration: BoxDecoration(
-                                        color: colors[index % colors.length],
-                                        shape: BoxShape.circle,
-                                      ),
+                        child: SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (categoryDistribution.isEmpty)
+                                Text(
+                                  'Loading categories...',
+                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: AppTheme.neutral500,
+                                  ),
+                                )
+                              else
+                                ...categoryDistribution.map((category) {
+                                  final index = categoryDistribution.indexOf(category);
+                                  final categoryName = (category['name'] as String?) ?? 'Unknown';
+                                  final count = (category['count'] as num?)?.toInt() ?? 0;
+                                  
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: AppTheme.spacingSm),
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          width: 12,
+                                          height: 12,
+                                          decoration: BoxDecoration(
+                                            color: categoryColors[index % categoryColors.length],
+                                            shape: BoxShape.circle,
+                                          ),
+                                        ),
+                                        const SizedBox(width: AppTheme.spacingSm),
+                                        Expanded(
+                                          child: Text(
+                                            categoryName,
+                                            style: Theme.of(context).textTheme.bodySmall,
+                                          ),
+                                        ),
+                                        Text(
+                                          '$count products',
+                                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                    const SizedBox(width: AppTheme.spacingSm),
-                                    Expanded(
-                                      child: Text(
-                                        (category['name'] as String?) ?? 'Unknown Category',
-                                        style: Theme.of(context).textTheme.bodySmall,
-                                      ),
-                                    ),
-                                    Text(
-                                      '${(category['count'] as num?)?.toInt() ?? 0}',
-                                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }).toList(),
-                          ],
+                                  );
+                                }).toList(),
+                            ],
+                          ),
                         ),
                       ),
                     ],
@@ -904,7 +946,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               const Spacer(),
               TextButton(
-                onPressed: () {},
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const AllOrdersScreen(),
+                    ),
+                  );
+                },
                 child: Text('View All'),
               ),
             ],

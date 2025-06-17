@@ -117,7 +117,7 @@ class AnalyticsService {
       
       for (var doc in productsSnapshot.docs) {
         final data = doc.data();
-        final category = data['productCategory']?.toString() ?? 'Other';
+        final category = data['categoryName']?.toString() ?? 'Other';
         categoryCount[category] = (categoryCount[category] ?? 0) + 1;
       }
       

@@ -14,6 +14,7 @@ import '../responsive.dart';
 import '../controllers/MenuController.dart' as grocery;
 import '../screens/loading_manager.dart';
 import '../inner_screens/categories_screen.dart';
+import '../widgets/reviews_management_widget.dart';
 
 class EditProductScreen extends StatefulWidget {
   static const routeName = '/EditProductScreen';
@@ -337,6 +338,11 @@ class _EditProductScreenState extends State<EditProductScreen> {
                                 controller: _caloriesController,
                                 keyboardType: TextInputType.number,
                                 decoration: InputDecoration(labelText: 'Calories', filled: true),
+                              ),
+                              const SizedBox(height: 30),
+                              ReviewsManagementWidget(
+                                productId: widget.id,
+                                productTitle: widget.title,
                               ),
                               const SizedBox(height: 30),
                               ElevatedButton.icon(

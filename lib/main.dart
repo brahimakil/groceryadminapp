@@ -1,12 +1,14 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:grocery_admin_panel/screens/main_screen.dart';
+import 'package:grocery_admin_panel/screens/auth_screen.dart';
 import 'package:grocery_admin_panel/themes/app_theme.dart';
 import 'package:provider/provider.dart';
 
 import 'controllers/MenuController.dart' as grocery;
 import 'inner_screens/add_prod.dart';
 import 'providers/dark_theme_provider.dart';
+import 'providers/simple_admin_provider.dart';
 import 'firebase_options.dart';
 import 'inner_screens/categories_screen.dart';
 
@@ -49,6 +51,9 @@ class _MyAppState extends State<MyApp> {
         ChangeNotifierProvider(
           create: (_) => themeChangeProvider,
         ),
+        ChangeNotifierProvider(
+          create: (_) => SimpleAdminProvider(),
+        ),
       ],
       child: Consumer<DarkThemeProvider>(
         builder: (context, themeProvider, _) {
@@ -88,7 +93,7 @@ class __AppLoaderState extends State<_AppLoader> {
     
     if (mounted) {
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => const MainScreen())
+        MaterialPageRoute(builder: (context) => const AuthWrapper())
       );
     }
   }
@@ -128,6 +133,23 @@ class __AppLoaderState extends State<_AppLoader> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class AuthWrapper extends StatelessWidget {
+  const AuthWrapper({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<SimpleAdminProvider>(
+      builder: (context, adminProvider, _) {
+        if (adminProvider.isLoggedIn) {
+          return const MainScreen();
+        } else {
+          return const AuthScreen();
+        }
+      },
     );
   }
 }

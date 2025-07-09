@@ -1,0 +1,109 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if user is admin
+    function isAdmin() {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isActive == true;
+    }
+    
+    // Helper function to check if user is owner or admin
+    function isOwnerOrAdmin(userId) {
+      return isAuthenticated() && 
+             (request.auth.uid == userId || isAdmin());
+    }
+    
+    // Users collection - Admin can manage users, users can read/write their own data
+    match /users/{userId} {
+      allow read: if isOwnerOrAdmin(userId);
+      allow write: if isOwnerOrAdmin(userId);
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Categories collection - Admin can manage, users can read
+    match /categories/{categoryId} {
+      allow read: if true; // Allow all users to read categories
+      allow write: if isAdmin(); // Only admin can create/update/delete categories
+    }
+    
+    // Products collection - Admin can manage, users can read
+    match /products/{productId} {
+      allow read: if true; // Allow all users to read products
+      allow write: if isAdmin(); // Only admin can create/update/delete products
+    }
+    
+    // Orders collection - Admin can manage, users can manage their own orders
+    match /orders/{orderId} {
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow create: if isAuthenticated() && request.auth.uid == resource.data.userId;
+      allow update: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow delete: if isAdmin(); // Only admin can delete orders
+    }
+    
+    // Reviews collection - Users can manage their own reviews, admin can manage all
+    match /reviews/{reviewId} {
+      allow read: if true; // Allow all users to read reviews
+      allow create: if isAuthenticated() && request.auth.uid == resource.data.userId;
+      allow update: if isAuthenticated() && request.auth.uid == resource.data.userId;
+      allow delete: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+    }
+    
+    // Cart collection - Users can manage their own cart
+    match /cart/{userId} {
+      allow read, write: if isAuthenticated() && request.auth.uid == userId;
+      
+      // Cart items subcollection
+      match /items/{itemId} {
+        allow read, write: if isAuthenticated() && request.auth.uid == userId;
+      }
+    }
+    
+    // User addresses collection - Users can manage their own addresses
+    match /userAddresses/{userId} {
+      allow read, write: if isAuthenticated() && request.auth.uid == userId;
+      
+      // Individual addresses subcollection
+      match /addresses/{addressId} {
+        allow read, write: if isAuthenticated() && request.auth.uid == userId;
+      }
+    }
+    
+    // Admin analytics and reports - Only admin can access
+    match /analytics/{document} {
+      allow read, write: if isAdmin();
+    }
+    
+    // Admin settings - Only admin can access
+    match /adminSettings/{document} {
+      allow read, write: if isAdmin();
+    }
+    
+    // System configurations - Only admin can access
+    match /systemConfig/{document} {
+      allow read, write: if isAdmin();
+    }
+    
+    // Notifications - Admin can manage all, users can read their own
+    match /notifications/{notificationId} {
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow write: if isAdmin();
+    }
+    
+    // Inventory management - Only admin can access
+    match /inventory/{document} {
+      allow read, write: if isAdmin();
+    }
+    
+    // Default deny rule for any other collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+} 

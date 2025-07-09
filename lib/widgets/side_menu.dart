@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import '../screens/main_screen.dart';
 import '../inner_screens/categories_screen.dart';
+import '../providers/simple_admin_provider.dart';
 
 class SideMenu extends StatefulWidget {
   const SideMenu({Key? key}) : super(key: key);
@@ -290,31 +291,42 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
                   ),
                   const SizedBox(width: AppTheme.spacingMd),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'Admin User',
-                          style: AppTheme.bodyMedium.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        Text(
-                          'admin@grocery.com',
-                          style: AppTheme.bodySmall.copyWith(
-                            color: isDark ? AppTheme.neutral400 : AppTheme.neutral500,
-                          ),
-                        ),
-                      ],
+                    child: Consumer<SimpleAdminProvider>(
+                      builder: (context, adminProvider, _) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              adminProvider.adminData?['name'] ?? 'Admin User',
+                              style: AppTheme.bodyMedium.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Text(
+                              adminProvider.adminData?['email'] ?? 'admin@grocery.com',
+                              style: AppTheme.bodySmall.copyWith(
+                                color: isDark ? AppTheme.neutral400 : AppTheme.neutral500,
+                              ),
+                            ),
+                          ],
+                        );
+                      },
                     ),
                   ),
-                  IconButton(
-                    onPressed: () {},
-                    icon: Icon(
-                      Icons.settings_rounded,
-                      color: isDark ? AppTheme.neutral400 : AppTheme.neutral500,
-                    ),
+                  Consumer<SimpleAdminProvider>(
+                    builder: (context, adminProvider, _) {
+                      return IconButton(
+                        onPressed: () {
+                          adminProvider.logout();
+                        },
+                        icon: Icon(
+                          Icons.logout_rounded,
+                          color: isDark ? AppTheme.neutral400 : AppTheme.neutral500,
+                        ),
+                        tooltip: 'Logout',
+                      );
+                    },
                   ),
                 ],
               ),
